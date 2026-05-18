@@ -1,0 +1,1527 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>掴み取れ！闇マネー</title>
+    <!-- Tailwind CSS for modern responsive styles -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome for game icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts for clear and high-legibility Japanese/English text -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&family=Roboto+Mono:wght@500;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Noto Sans JP', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #0f172a;
+            color: #1e293b;
+            touch-action: manipulation;
+        }
+        /* Custom styles to secure the 448x720 canvas/container */
+        .game-viewport {
+            width: 448px;
+            height: 720px;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(14, 165, 233, 0.3);
+        }
+        /* Shake effect for misses */
+        @keyframes shake {
+            0%, 100% { transform: translate(0, 0); }
+            10%, 30%, 50%, 70%, 90% { transform: translate(-4px, 0); }
+            20%, 40%, 60%, 80% { transform: translate(4px, 0); }
+        }
+        .shake-anim {
+            animation: shake 0.4s ease-in-out;
+        }
+
+        /* Periodic character flipping animation (stretching scaleX) */
+        @keyframes flip-char {
+            0%, 45% { transform: scaleX(1); }
+            50%, 95% { transform: scaleX(-1); }
+        }
+        .flip-char-anim {
+            animation: flip-char 2.8s infinite ease-in-out;
+        }
+
+        /* Showering money particles effect from rooftop */
+        @keyframes scatter-fast {
+            0% { opacity: 0; transform: translate(0, 0) scale(0.3); }
+            50% { opacity: 1; }
+            100% { opacity: 0; transform: translate(var(--tw-tx, 10px), -16px) scale(0.9); }
+        }
+        .scatter-dot {
+            animation: scatter-fast 0.8s infinite linear;
+        }
+
+        /* Police siren light blinkers alternating red/blue */
+        @keyframes lamp-red {
+            0%, 49% { background-color: #ef4444; box-shadow: 0 0 10px #ef4444, 0 0 20px #ef4444; }
+            50%, 100% { background-color: #1e293b; box-shadow: none; }
+        }
+        @keyframes lamp-blue {
+            0%, 49% { background-color: #1e293b; box-shadow: none; }
+            50%, 100% { background-color: #3b82f6; box-shadow: 0 0 10px #3b82f6, 0 0 20px #3b82f6; }
+        }
+        .siren-red { animation: lamp-red 0.15s infinite; }
+        .siren-blue { animation: lamp-blue 0.15s infinite; }
+
+        /* Red alert flashing background to clearly warn not to touch money */
+        @keyframes police-siren-flash {
+            0%, 100% { 
+                background-color: rgba(239, 68, 68, 0.05);
+                box-shadow: inset 0 0 15px rgba(239, 68, 68, 0.1);
+            }
+            50% { 
+                background-color: rgba(220, 38, 38, 0.45); 
+                box-shadow: inset 0 0 80px rgba(220, 38, 38, 0.9);
+            }
+        }
+        .siren-active {
+            animation: police-siren-flash 0.4s infinite ease-in-out;
+        }
+
+        /* Highly Slow and Mysterious pulsating/glowing animation for the moon */
+        @keyframes slow-pulse {
+            0%, 100% { 
+                opacity: 0.65; 
+                box-shadow: 0 0 15px #fef08a, 0 0 30px rgba(253, 224, 71, 0.35);
+            }
+            50% { 
+                opacity: 1; 
+                box-shadow: 0 0 35px #fef08a, 0 0 65px rgba(253, 224, 71, 0.8);
+            }
+        }
+        .moon-pulse {
+            animation: slow-pulse 6.0s infinite ease-in-out;
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen p-2 overflow-hidden select-none">
+
+    <!-- Main fixed size container to lock inside 448x720 -->
+    <div class="game-viewport bg-slate-950 rounded-2xl border-4 border-indigo-950 flex flex-col relative" id="gameViewport">
+        
+        <!-- ================= TITLE SCREEN ================= -->
+        <div id="titleScreen" class="absolute inset-0 bg-gradient-to-b from-slate-950 via-slate-900 to-indigo-950 z-40 flex flex-col justify-between p-6 text-center text-white">
+            <div class="mt-8">
+                <h1 class="text-3xl text-slate-100 font-black leading-tight tracking-wider">
+                    掴み取れ！<br>
+                    <span class="text-emerald-500 text-4xl">闇マネー</span>
+                </h1>
+            </div>
+
+            <!-- Game description and how to play -->
+            <div class="bg-slate-900/90 border border-indigo-900 rounded-xl p-4 text-left text-[11px] space-y-2.5 max-w-xs mx-auto text-slate-300 shadow-lg leading-relaxed">
+                <div class="flex items-center text-emerald-400 font-bold mb-1">
+                    <i class="fa-solid fa-gamepad mr-2"></i>遊び方ルール：
+                </div>
+                <p class="flex items-start"><span class="text-emerald-400 mr-2">&#9679;</span>落ちてくるマネーをキャッチしろ</p>
+                <p class="flex items-start"><span class="text-rose-400 mr-2">&#9679;</span>道路に落とす、空振りでライフが減るぞ</p>
+                <p class="flex items-start"><span class="text-amber-400 mr-2">&#9679;</span>パトカー通過中はキャッチ禁止！落としてもセーフ！</p>
+                <p class="flex items-start"><span class="text-blue-400 mr-2">&#9679;</span>20のライフが0になるとゲームオーバー</p>
+            </div>
+
+            <div class="mb-8 space-y-4">
+                <button id="btnStart" class="w-full max-w-xs py-3.5 bg-red-600 hover:bg-red-500 text-white font-black text-lg rounded-xl shadow-[0_0_15px_rgba(220,38,38,0.5)] border border-red-700 active:scale-95 transition-transform duration-75">
+                    現場に急行だ！
+                </button>
+                <div class="flex justify-center space-x-4 text-xs">
+                    <button id="btnSoundToggle" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-indigo-900 rounded-full flex items-center gap-1.5 text-slate-300 font-medium">
+                        <i id="soundIcon" class="fa-solid fa-volume-high text-emerald-400"></i>
+                        <span id="soundText">サウンド: ON</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= HUD (HEADS-UP DISPLAY) ================= -->
+        <!-- Fixed height is secured at exactly h-[96px] to prevent vertical layout shifting -->
+        <div id="hud" class="h-[96px] w-full bg-white border-b border-sky-200 p-3 flex flex-col justify-between z-30 pointer-events-none shadow-sm shrink-0 overflow-hidden">
+            <div class="flex items-center justify-between">
+                <!-- Score Container -->
+                <div>
+                    <div class="text-[9px] text-slate-500 font-bold tracking-wider">GET MONEY</div>
+                    <div class="text-xl text-emerald-600 font-bold flex items-center">
+                        <span class="text-base mr-0.5 text-emerald-500">&yen;</span>
+                        <span id="scoreDisplay" class="font-mono">0</span>
+                    </div>
+                </div>
+                <!-- Difficulty/Time indicator -->
+                <div class="text-right">
+                    <div class="text-[9px] text-slate-500 font-bold tracking-wider">SPEED LEVEL</div>
+                    <div class="text-xs text-yellow-600 font-bold" id="levelDisplay">LV.1 (NORMAL)</div>
+                </div>
+            </div>
+            
+            <!-- Life Display -->
+            <div class="mt-1">
+                <div class="flex justify-between items-center mb-0.5 text-[9px] text-slate-500 font-bold">
+                    <span>LIFE MONITOR (MAX 20 MISSED)</span>
+                    <span id="lifeText" class="text-rose-600 font-mono font-bold">20/20</span>
+                </div>
+                <!-- Life indicator dots / bars -->
+                <div class="h-2 w-full bg-slate-100 rounded-full overflow-hidden flex" id="lifeBar">
+                    <div id="lifeBarFill" class="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-100" style="width: 100%;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= PLAYING AREA ================= -->
+        <div id="gamePlayArea" class="flex-1 relative bg-gradient-to-b from-slate-950 via-slate-900 to-indigo-950 cursor-crosshair overflow-hidden transition-all duration-300">
+            <!-- Clouds drift decorations - Using standard unicode numerical code to avoid raw emoji encoding issues -->
+            <div class="absolute top-6 left-6 text-3xl opacity-20 select-none pointer-events-none">&#x2601;</div>
+            <div class="absolute top-24 right-12 text-4xl opacity-10 select-none pointer-events-none">&#x2601;</div>
+            <div class="absolute top-12 left-1/3 text-2xl opacity-15 select-none pointer-events-none">&#x2601;</div>
+
+            <!-- Highly Glowing CSS Yellow Moon with Slow Pulsating Aura -->
+            <div class="absolute top-4 right-8 w-14 h-14 bg-gradient-to-br from-yellow-100 via-yellow-200 to-amber-300 rounded-full pointer-events-none z-0 flex items-center justify-center moon-pulse">
+                <div class="absolute inset-1.5 bg-yellow-200/20 rounded-full blur-[1px]"></div>
+            </div>
+
+            <!-- Skyline (City building silhouettes) in background - Adjusted to be much larger and closer to top -->
+            <div class="absolute bottom-[80px] left-0 w-full h-[450px] pointer-events-none flex items-end justify-around z-0 px-1 opacity-95">
+                <!-- Tower 1 -->
+                <div class="w-28 h-[380px] bg-slate-800 rounded-t-lg relative shadow-lg border-t border-x border-slate-700/50">
+                    <!-- Thrower Silhouette at Rooftop (Stationary) -->
+                    <div id="throwerLeft" class="absolute -top-7 left-[48px] text-xl select-none pointer-events-none text-slate-400 flex flex-col items-center transition-opacity duration-300 opacity-0">
+                        <!-- Scatter money particles -->
+                        <div class="absolute -top-3.5 flex gap-0.5 justify-center w-8">
+                            <span class="w-1.5 h-1 bg-emerald-400 rounded-sm scatter-dot" style="--tw-tx: -10px;"></span>
+                            <span class="w-1.5 h-1 bg-yellow-400 rounded-sm scatter-dot" style="--tw-tx: 5px; animation-delay: 0.25s;"></span>
+                            <span class="w-1.5 h-1 bg-emerald-300 rounded-sm scatter-dot" style="--tw-tx: -2px; animation-delay: 0.5s;"></span>
+                        </div>
+                        <div class="flip-char-anim">&#x1F6B6;</div>
+                    </div>
+                    <div class="absolute -top-2 left-0 w-full h-1.5 bg-slate-700"></div> <!-- Handrail -->
+                    <div class="absolute inset-x-3 top-4 bottom-0 grid grid-cols-2 gap-2 pb-2">
+                        <div class="bg-yellow-300/90 rounded-sm h-3 shadow-[0_0_4px_#fde047]"></div>
+                        <div class="bg-yellow-300/90 rounded-sm h-3 shadow-[0_0_4px_#fde047]"></div>
+                        <div class="bg-slate-950/50 rounded-sm h-3"></div>
+                        <div class="bg-yellow-300/90 rounded-sm h-3 shadow-[0_0_4px_#fde047]"></div>
+                        <div class="bg-yellow-300/90 rounded-sm h-3 shadow-[0_0_4px_#fde047]"></div>
+                        <div class="bg-slate-950/50 rounded-sm h-3"></div>
+                        <div class="bg-yellow-300/90 rounded-sm h-3 shadow-[0_0_4px_#fde047]"></div>
+                        <div class="bg-yellow-300/90 rounded-sm h-3 shadow-[0_0_4px_#fde047]"></div>
+                    </div>
+                </div>
+                <!-- Tower 2 (Main closest giant tower) -->
+                <div class="w-36 h-[420px] bg-slate-900 rounded-t-lg relative shadow-xl border-t border-x border-slate-800/50">
+                    <!-- Thrower Silhouette at Rooftop (Stationary) -->
+                    <div id="throwerCenter" class="absolute -top-7 left-[60px] text-xl select-none pointer-events-none text-slate-400 flex flex-col items-center transition-opacity duration-300 opacity-100">
+                        <!-- Scatter money particles -->
+                        <div class="absolute -top-3.5 flex gap-0.5 justify-center w-8">
+                            <span class="w-1.5 h-1 bg-emerald-400 rounded-sm scatter-dot" style="--tw-tx: -12px;"></span>
+                            <span class="w-1.5 h-1 bg-yellow-400 rounded-sm scatter-dot" style="--tw-tx: 6px; animation-delay: 0.2s;"></span>
+                            <span class="w-1.5 h-1 bg-emerald-300 rounded-sm scatter-dot" style="--tw-tx: -4px; animation-delay: 0.4s;"></span>
+                        </div>
+                        <div class="flip-char-anim">&#x1F9CD;</div>
+                    </div>
+                    <div class="absolute -top-2 left-0 w-full h-1.5 bg-slate-800"></div> <!-- Handrail -->
+                    <div class="absolute inset-x-4 top-6 bottom-0 grid grid-cols-3 gap-2 pb-2">
+                        <div class="bg-yellow-300/90 rounded-sm h-3 shadow-[0_0_4px_#fde047]"></div><div class="bg-yellow-300/90 rounded-sm h-3 shadow-[0_0_4px_#fde047]"></div><div class="bg-slate-950/50 rounded-sm h-3"></div>
+                        <div class="bg-slate-950/50 rounded-sm h-3"></div><div class="bg-yellow-300/90 rounded-sm h-3 shadow-[0_0_4px_#fde047]"></div><div class="bg-yellow-300/90 rounded-sm h-3 shadow-[0_0_4px_#fde047]"></div>
+                        <div class="bg-yellow-300/90 rounded-sm h-3 shadow-[0_0_4px_#fde047]"></div><div class="bg-slate-950/50 rounded-sm h-3"></div><div class="bg-yellow-300/90 rounded-sm h-3 shadow-[0_0_4px_#fde047]"></div>
+                        <div class="bg-yellow-300/90 rounded-sm h-3 shadow-[0_0_4px_#fde047]"></div><div class="bg-yellow-300/90 rounded-sm h-3 shadow-[0_0_4px_#fde047]"></div><div class="bg-slate-950/50 rounded-sm h-3"></div>
+                    </div>
+                </div>
+                <!-- Tower 3 -->
+                <div class="w-28 h-[350px] bg-slate-800 rounded-t-lg relative shadow-lg border-t border-x border-slate-700/50">
+                    <!-- Thrower Silhouette at Rooftop (Stationary) -->
+                    <div id="throwerRight" class="absolute -top-7 left-[48px] text-xl select-none pointer-events-none text-slate-400 flex flex-col items-center transition-opacity duration-300 opacity-0">
+                        <!-- Scatter money particles -->
+                        <div class="absolute -top-3.5 flex gap-0.5 justify-center w-8">
+                            <span class="w-1.5 h-1 bg-emerald-400 rounded-sm scatter-dot" style="--tw-tx: -8px;"></span>
+                            <span class="w-1.5 h-1 bg-yellow-400 rounded-sm scatter-dot" style="--tw-tx: 4px; animation-delay: 0.3s;"></span>
+                            <span class="w-1.5 h-1 bg-emerald-300 rounded-sm scatter-dot" style="--tw-tx: -1px; animation-delay: 0.6s;"></span>
+                        </div>
+                        <div class="flip-char-anim">&#x1F3C3;</div>
+                    </div>
+                    <div class="absolute -top-2 left-0 w-full h-1.5 bg-slate-700"></div> <!-- Handrail -->
+                    <div class="absolute inset-x-3 top-4 bottom-0 grid grid-cols-2 gap-2 pb-2">
+                        <div class="bg-slate-950/50 rounded-sm h-3"></div>
+                        <div class="bg-yellow-300/90 rounded-sm h-3 shadow-[0_0_4px_#fde047]"></div>
+                        <div class="bg-yellow-300/90 rounded-sm h-3 shadow-[0_0_4px_#fde047]"></div>
+                        <div class="bg-slate-950/50 rounded-sm h-3"></div>
+                        <div class="bg-yellow-300/90 rounded-sm h-3 shadow-[0_0_4px_#fde047]"></div>
+                        <div class="bg-yellow-300/90 rounded-sm h-3 shadow-[0_0_4px_#fde047]"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Asphalt Road / Ground at the bottom -->
+            <div class="absolute bottom-0 left-0 w-full h-[80px] bg-slate-700 border-t-4 border-slate-600 z-10 pointer-events-none">
+                <!-- Sidewalk top curb -->
+                <div class="absolute top-0 w-full h-2 bg-slate-400"></div>
+                <!-- Yellow dash center lines -->
+                <div class="w-full h-1 border-t-2 border-dashed border-yellow-300 mt-8 opacity-80"></div>
+            </div>
+
+            <!-- Alert Warning Banner centered on screen with heavy warning style -->
+            <!-- Fixed perfectly in the center utilizing direct inline CSS to prevent Tailwind CDN class generation loss -->
+            <div id="policeAlertBanner" class="absolute z-15 hidden w-[300px] text-center pointer-events-none" style="top: 50%; left: 50%; transform: translate(-50%, -50%);">
+                <div id="policeAlertInner" class="w-full px-6 py-4 rounded-2xl shadow-2xl border-4 flex flex-col items-center gap-2 transition-all duration-300">
+                    <i id="policeBannerIcon" class="fa-solid fa-triangle-exclamation text-3xl"></i>
+                    <span id="policeBannerText" class="text-sm font-black tracking-wider leading-relaxed">パトカー接近中！</span>
+                </div>
+            </div>
+
+            <!-- Static Center Difficulty Alert Banner (Now Yellow Background at the Top of Gameplay Area) -->
+            <!-- Placed below HUD, with lower z-index than spawnContainer to keep money in front -->
+            <div id="difficultyAlert" class="absolute top-[102px] left-1/2 -translate-x-1/2 bg-yellow-500 border-2 border-yellow-400 text-slate-950 font-extrabold text-sm px-6 py-2 rounded-xl shadow-xl z-15 hidden transition-all duration-300 animate-pulse">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-circle-up animate-bounce text-slate-950"></i>
+                    <span>難易度アップ！ <span id="difficultyAlertLevel" class="font-mono">LV.2</span></span>
+                </div>
+            </div>
+
+            <!-- Spawn Container for Game Objects - Shifted z-index to 25 to ensure money appears in front of alert banners -->
+            <div id="spawnContainer" class="absolute inset-0 z-25"></div>
+        </div>
+
+        <!-- ================= ARREST OVERLAY ================= -->
+        <!-- Fixed style opacity transitions with 100% solid opacity and full coverage to avoid background leakage -->
+        <div id="arrestOverlay" class="absolute inset-0 bg-red-950 z-50 flex flex-col items-center justify-center text-white hidden opacity-0 transition-opacity duration-500 pointer-events-none">
+            <div class="text-center space-y-6">
+                <div class="text-6xl font-black tracking-widest text-red-500 drop-shadow-[0_0_20px_rgba(239,68,68,0.9)] animate-bounce">
+                    逮捕だ！！！
+                </div>
+                <div class="text-sm text-slate-300 font-bold tracking-wider px-6 leading-relaxed">
+                    警察パトロール中に闇マネーを掴んでしまった！
+                </div>
+                <div class="text-xs text-rose-400 font-mono tracking-widest animate-pulse">
+                    - ILLEGAL OPERATION DETECTED -
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= GAME OVER OVERLAY ================= -->
+        <div id="gameOverScreen" class="absolute inset-0 bg-slate-900/95 z-40 flex flex-col justify-between p-6 text-center hidden">
+            <div class="mt-8 space-y-2">
+                <div class="text-rose-500 text-4xl font-black tracking-wider animate-pulse">
+                    GAME OVER
+                </div>
+                <div class="text-[11px] text-slate-400">
+                    道路にお金が落ちたか、空振り回数が上限に達しました。
+                </div>
+            </div>
+
+            <!-- Stats Table -->
+            <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 max-w-xs mx-auto w-full space-y-3 shadow-inner text-white">
+                <div>
+                    <div class="text-[9px] text-slate-400 uppercase tracking-widest mb-0.5">獲得した裏資産</div>
+                    <div class="text-2xl text-emerald-400 font-bold font-mono">
+                        <span>&yen;</span><span id="finalScoreDisplay">0</span>
+                    </div>
+                </div>
+
+                <!-- Money Mountain visual directly below the final score -->
+                <div id="moneyMountainArea" class="h-28 w-full max-w-[280px] mx-auto bg-slate-950/40 border border-slate-700 rounded-xl relative overflow-hidden shadow-inner flex items-end justify-center">
+                    <!-- JS will procedurally generate realistic bills/coins based on total score -->
+                </div>
+
+                <hr class="border-slate-700">
+                <div class="grid grid-cols-2 gap-1.5 text-xs text-left text-slate-300">
+                    <div>最大到達スピード:</div>
+                    <div class="text-right font-bold text-yellow-400" id="finalLevelDisplay">LV.1</div>
+                    <div>生存時間:</div>
+                    <div class="text-right font-bold text-slate-100" id="finalTimeDisplay">0秒</div>
+                    <div>掴み取った回数:</div>
+                    <div class="text-right font-bold text-emerald-400" id="finalCatchDisplay">0回</div>
+                </div>
+                <div id="newRecordBanner" class="bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-xs py-1 rounded-lg font-bold hidden">
+                    &yen; 自己新記録を達成しました！ &yen;
+                </div>
+            </div>
+
+            <!-- Realigned Actions: Retry & Back to Title buttons with identical visual py-3 height and fonts -->
+            <div class="mb-4 space-y-2">
+                <button id="btnRetry" class="w-full max-w-xs py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-base rounded-xl shadow-md active:scale-95 transition-transform duration-75">
+                    もう一度挑戦する
+                </button>
+                <button id="btnBackToTitle" class="w-full max-w-xs py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-base rounded-xl border border-slate-700 shadow-md active:scale-95 transition-transform">
+                    タイトルに戻る
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // ================= SOUND SYSTEM (Web Audio API) =================
+        let isSoundEnabled = true;
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        // Standard Synth Beeps for FX to ensure 100% offline self-contained audio
+        function playSound(type) {
+            if (!isSoundEnabled) return;
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            const now = audioCtx.currentTime;
+
+            switch(type) {
+                case 'catch_coin': {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(880.00, now);
+                    osc.frequency.setValueAtTime(1320.00, now + 0.08);
+                    gain.gain.setValueAtTime(0.12, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+                    osc.start(now);
+                    osc.stop(now + 0.25);
+                    break;
+                }
+                case 'catch_paper': {
+                    const osc = audioCtx.createOscillator();
+                    const filter = audioCtx.createBiquadFilter();
+                    const gain = audioCtx.createGain();
+                    osc.connect(filter);
+                    filter.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(250, now);
+                    osc.frequency.exponentialRampToValueAtTime(1200, now + 0.12);
+                    filter.type = 'bandpass';
+                    filter.frequency.setValueAtTime(1500, now);
+                    filter.Q.setValueAtTime(1.2, now);
+                    gain.gain.setValueAtTime(0.15, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+                    osc.start(now);
+                    osc.stop(now + 0.18);
+                    break;
+                }
+                case 'miss': {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(130, now);
+                    osc.frequency.linearRampToValueAtTime(65, now + 0.2);
+                    gain.gain.setValueAtTime(0.15, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+                    osc.start(now);
+                    osc.stop(now + 0.25);
+                    break;
+                }
+                case 'warning_alert': {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(523.25, now);
+                    osc.frequency.setValueAtTime(659.25, now + 0.1);
+                    gain.gain.setValueAtTime(0.06, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+                    osc.start(now);
+                    osc.stop(now + 0.25);
+                    break;
+                }
+                case 'siren': {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(680, now);
+                    osc.frequency.linearRampToValueAtTime(880, now + 0.15);
+                    osc.frequency.linearRampToValueAtTime(680, now + 0.3);
+                    gain.gain.setValueAtTime(0.06, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+                    osc.start(now);
+                    osc.stop(now + 0.35);
+                    break;
+                }
+                case 'arrest': {
+                    const osc1 = audioCtx.createOscillator();
+                    const osc2 = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc1.connect(gain);
+                    osc2.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc1.type = 'sawtooth';
+                    osc2.type = 'square';
+                    osc1.frequency.setValueAtTime(100, now);
+                    osc2.frequency.setValueAtTime(105, now);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+                    osc1.start(now);
+                    osc2.start(now);
+                    osc1.stop(now + 0.5);
+                    osc2.stop(now + 0.5);
+                    break;
+                }
+                case 'gameover': {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(329.63, now);
+                    osc.frequency.setValueAtTime(293.66, now + 0.2);
+                    osc.frequency.setValueAtTime(261.63, now + 0.4);
+                    osc.frequency.setValueAtTime(196.00, now + 0.6);
+                    gain.gain.setValueAtTime(0.18, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
+                    osc.start(now);
+                    osc.stop(now + 1.2);
+                    break;
+                }
+                case 'level_up': {
+                    const notes = [261.63, 329.63, 392.00, 523.25];
+                    notes.forEach((freq, idx) => {
+                        const osc = audioCtx.createOscillator();
+                        const gain = audioCtx.createGain();
+                        osc.connect(gain);
+                        gain.connect(audioCtx.destination);
+                        osc.type = 'triangle';
+                        osc.frequency.setValueAtTime(freq, now + (idx * 0.08));
+                        gain.gain.setValueAtTime(0.1, now + (idx * 0.08));
+                        gain.gain.exponentialRampToValueAtTime(0.001, now + (idx * 0.08) + 0.25);
+                        osc.start(now + (idx * 0.08));
+                        osc.stop(now + (idx * 0.08) + 0.25);
+                    });
+                    break;
+                }
+            }
+        }
+
+        let bgmIntervalId = null;
+        let bgmTempo = 135;
+        let bgmStep = 0;
+        
+        function startBgm() {
+            if (bgmIntervalId) clearInterval(bgmIntervalId);
+            bgmStep = 0;
+            const stepDuration = 60 / bgmTempo / 2;
+            
+            const bassline = [
+                110.00, 110.00, 130.81, 110.00,
+                146.83, 110.00, 130.81, 110.00,
+                98.00,  98.00,  116.54, 98.00,
+                130.81, 98.00,  110.00, 123.47
+            ];
+
+            bgmIntervalId = setInterval(() => {
+                if (!isSoundEnabled) return;
+                const now = audioCtx.currentTime;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.type = 'triangle';
+                const freq = bassline[bgmStep % bassline.length];
+                const transposeFactor = gameState.speedLevel > 5 ? 1.5 : (gameState.speedLevel > 3 ? 1.2 : 1.0);
+                osc.frequency.setValueAtTime(freq * transposeFactor, now);
+                gain.gain.setValueAtTime(0.04, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + stepDuration * 0.95);
+                osc.start(now);
+                osc.stop(now + stepDuration * 0.95);
+                
+                if (bgmStep % 4 === 2) {
+                    const hat = audioCtx.createOscillator();
+                    const hatGain = audioCtx.createGain();
+                    hat.connect(hatGain);
+                    hatGain.connect(audioCtx.destination);
+                    hat.type = 'triangle';
+                    hat.frequency.setValueAtTime(7000, now);
+                    hat.frequency.exponentialRampToValueAtTime(1500, now + 0.04);
+                    hatGain.gain.setValueAtTime(0.01, now);
+                    hatGain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+                    hat.start(now);
+                    hat.stop(now + 0.05);
+                }
+                bgmStep++;
+            }, stepDuration * 1000);
+        }
+
+        function stopBgm() {
+            if (bgmIntervalId) {
+                clearInterval(bgmIntervalId);
+                bgmIntervalId = null;
+            }
+        }
+    </script>
+
+    <script>
+        // ================= GAME ENGINE & STATE =================
+        const titleScreen = document.getElementById('titleScreen');
+        const hud = document.getElementById('hud');
+        const gamePlayArea = document.getElementById('gamePlayArea');
+        const spawnContainer = document.getElementById('spawnContainer');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const policeAlertBanner = document.getElementById('policeAlertBanner');
+        const policeBannerIcon = document.getElementById('policeBannerIcon');
+        const policeBannerText = document.getElementById('policeBannerText');
+        const difficultyAlert = document.getElementById('difficultyAlert');
+        const difficultyAlertLevel = document.getElementById('difficultyAlertLevel');
+        const moneyMountainArea = document.getElementById('moneyMountainArea');
+        const gameViewport = document.getElementById('gameViewport');
+
+        const btnStart = document.getElementById('btnStart');
+        const btnRetry = document.getElementById('btnRetry');
+        const btnBackToTitle = document.getElementById('btnBackToTitle');
+        const btnSoundToggle = document.getElementById('btnSoundToggle');
+        const soundIcon = document.getElementById('soundIcon');
+        const soundText = document.getElementById('soundText');
+
+        const scoreDisplay = document.getElementById('scoreDisplay');
+        const levelDisplay = document.getElementById('levelDisplay');
+        const lifeText = document.getElementById('lifeText');
+        const lifeBarFill = document.getElementById('lifeBarFill');
+        const finalScoreDisplay = document.getElementById('finalScoreDisplay');
+        const finalLevelDisplay = document.getElementById('finalLevelDisplay');
+        const finalTimeDisplay = document.getElementById('finalTimeDisplay');
+        const finalCatchDisplay = document.getElementById('finalCatchDisplay');
+        const newRecordBanner = document.getElementById('newRecordBanner');
+
+        // Game Constants
+        const CONFIG = {
+            width: 448,
+            height: 720,
+            baseSpawnInterval: 1250,    // Initial spawn interval (ms)
+            minSpawnInterval: 380,      // Maximum speed spawn interval (ms)
+            baseSpeed: 3.0,             // Beginning drop speed
+            maxSpeed: 9.5,              // Terminal max speed
+            maxLife: 20,                // Total life
+            copInterval: 14000,         // Interval between checking for police car events
+        };
+
+        let gameState = {
+            isPlaying: false,
+            score: 0,
+            life: CONFIG.maxLife,
+            speedLevel: 1,
+            startTime: 0,
+            elapsedSeconds: 0,
+            totalCatches: 0,
+            moneyElements: [],
+            copCars: [],
+            policeWarningActive: false, // T-2s Pre-warning alert phase active
+            policeAlertActive: false,   // Actual police car on scene phase active
+            policeAlertEndTime: 0,      // Seconds when police patrol ended
+            spawnTimer: null,
+            difficultyTimer: null,
+            policeTimer: null,
+            lastFrameTime: 0,
+            gameLoopId: null,
+            catchesCount: { 10000: 0, 5000: 0, 1000: 0, 500: 0, 100: 0 }
+        };
+
+        // Banknotes: type = 'paper' (always sways with angle). Coins: type = 'coin' (always falls straight down)
+        // コインは紙幣より早く落ち、かつ各カテゴリ内では金額が多いほど早く落ちるよう調整
+        const MONEY_TYPES = [
+            {
+                label: '1\u4e07\u5186',
+                value: 10000,
+                type: 'paper',
+                width: 116,
+                height: 62,
+                speedMultiplier: 1.05,  // 紙幣の中で最速（でもコインより遅い）
+                sinWave: true,
+                renderHTML: () => `
+                    <div class="w-full h-full rounded border-2 border-amber-600 bg-gradient-to-br from-amber-100 to-amber-200 shadow-md relative p-1 flex items-center justify-between select-none">
+                        <div class="absolute inset-0.5 border border-dashed border-amber-500/40 rounded pointer-events-none"></div>
+                        <div class="w-8 h-8 rounded-full border border-amber-300 bg-amber-50/50 flex items-center justify-center text-[9px] font-bold text-amber-700/60 pointer-events-none">10000</div>
+                        <div class="flex flex-col items-center justify-center z-10 select-none pointer-events-none">
+                            <span class="text-[12px] font-bold text-amber-950 leading-none">\u58f1\u4e07\u5186</span>
+                            <span class="text-[10px] font-mono text-amber-800 leading-none font-bold mt-0.5">&yen;10000</span>
+                        </div>
+                        <div class="w-7 h-7 bg-amber-300/60 rounded-full border border-amber-400 flex items-center justify-center text-sm z-10 pointer-events-none">\uD83D\uDC68\u200D\uD83D\uDCBC</div>
+                    </div>
+                `
+            },
+            {
+                label: '5\u5343\u5186',
+                value: 5000,
+                type: 'paper',
+                width: 108,
+                height: 58,
+                speedMultiplier: 0.90,  // 紙幣の中で2番目
+                sinWave: true,
+                renderHTML: () => `
+                    <div class="w-full h-full rounded border-2 border-purple-600 bg-gradient-to-br from-purple-100 to-purple-200 shadow-md relative p-1 flex items-center justify-between select-none">
+                        <div class="absolute inset-0.5 border border-dashed border-purple-500/40 rounded pointer-events-none"></div>
+                        <div class="w-7 h-7 rounded-full border border-purple-300 bg-purple-50/50 flex items-center justify-center text-[8px] font-bold text-purple-700/60 pointer-events-none">5000</div>
+                        <div class="flex flex-col items-center justify-center z-10 select-none pointer-events-none">
+                            <span class="text-[11px] font-bold text-purple-950 leading-none">\u4e94\u5343\u5186</span>
+                            <span class="text-[9px] font-mono text-purple-800 leading-none font-bold mt-0.5">&yen;5000</span>
+                        </div>
+                        <div class="w-7 h-7 bg-purple-300/60 rounded-full border border-purple-400 flex items-center justify-center text-sm z-10 pointer-events-none">\uD83D\uDC69\u200D\uD83D\uDCBC</div>
+                    </div>
+                `
+            },
+            {
+                label: '1\u5343\u5186',
+                value: 1000,
+                type: 'paper',
+                width: 100,
+                height: 54,
+                speedMultiplier: 0.75,  // 紙幣の中で最遅
+                sinWave: true,
+                renderHTML: () => `
+                    <div class="w-full h-full rounded border-2 border-teal-600 bg-gradient-to-br from-teal-100 to-teal-200 shadow-md relative p-1 flex items-center justify-between select-none">
+                        <div class="absolute inset-0.5 border border-dashed border-teal-500/40 rounded pointer-events-none"></div>
+                        <div class="w-7 h-7 rounded-full border border-teal-300 bg-teal-50/50 flex items-center justify-center text-[8px] font-bold text-teal-700/60 pointer-events-none">1000</div>
+                        <div class="flex flex-col items-center justify-center z-10 select-none pointer-events-none">
+                            <span class="text-[11px] font-bold text-teal-950 leading-none">\u5343\u5186</span>
+                            <span class="text-[9px] font-mono text-teal-800 leading-none font-bold mt-0.5">&yen;1000</span>
+                        </div>
+                        <div class="w-7 h-7 bg-teal-300/60 rounded-full border border-amber-400 flex items-center justify-center text-sm z-10 pointer-events-none">\uD83D\uDC68\u200D\u2695\uFE0F</div>
+                    </div>
+                `
+            },
+            {
+                label: '500\u5186',
+                value: 500,
+                type: 'coin',
+                width: 62,
+                height: 62,
+                speedMultiplier: 1.45,  // コインの中で最速
+                sinWave: false,
+                renderHTML: () => `
+                    <div class="w-full h-full rounded-full border-4 border-yellow-500 bg-gradient-to-br from-yellow-100 via-yellow-300 to-yellow-600 shadow-md flex flex-col items-center justify-center relative select-none">
+                        <div class="absolute inset-0.5 border border-dashed border-yellow-200/50 rounded-full pointer-events-none"></div>
+                        <span class="text-sm font-black text-yellow-950 leading-none z-10 pointer-events-none">500</span>
+                        <span class="text-[8px] font-bold text-yellow-900 leading-none mt-0.5 z-10 pointer-events-none">YEN</span>
+                    </div>
+                `
+            },
+            {
+                label: '100\u5186',
+                value: 100,
+                type: 'coin',
+                width: 54,
+                height: 54,
+                speedMultiplier: 1.25,  // コインの中で2番目
+                sinWave: false,
+                renderHTML: () => `
+                    <div class="w-full h-full rounded-full border-4 border-slate-400 bg-gradient-to-br from-slate-100 via-slate-300 to-slate-500 shadow-md flex flex-col items-center justify-center relative select-none">
+                        <div class="absolute inset-0.5 border border-dashed border-slate-200/50 rounded-full pointer-events-none"></div>
+                        <span class="text-sm font-black text-slate-950 leading-none z-10 pointer-events-none">100</span>
+                        <span class="text-[8px] font-bold text-slate-800 leading-none mt-0.5 z-10 pointer-events-none">YEN</span>
+                    </div>
+                `
+            }
+        ];
+
+        btnSoundToggle.addEventListener('pointerdown', (e) => {
+            e.stopPropagation();
+            isSoundEnabled = !isSoundEnabled;
+            if (isSoundEnabled) {
+                soundIcon.className = "fa-solid fa-volume-high text-emerald-600";
+                soundText.innerText = "\u30b5\u30a6\u30f3\u30c9: ON";
+                if (gameState.isPlaying) startBgm();
+            } else {
+                soundIcon.className = "fa-solid fa-volume-xmark text-slate-400";
+                soundText.innerText = "\u30b5\u30a6\u30f3\u30c9: OFF";
+                stopBgm();
+            }
+        });
+    </script>
+
+    <script>
+        btnStart.addEventListener('pointerdown', startGame);
+        btnRetry.addEventListener('pointerdown', () => {
+            resetGame();
+            startGame();
+        });
+        btnBackToTitle.addEventListener('pointerdown', () => {
+            resetGame();
+            gameOverScreen.classList.add('hidden');
+            titleScreen.classList.remove('hidden');
+        });
+
+        // Click detection on background play area = MISS (Air Miss)
+        gamePlayArea.addEventListener('pointerdown', (e) => {
+            if (!gameState.isPlaying) return;
+            handleAirMiss(e);
+        });
+
+        // Master function to clear all active entities immediately on Game End/Arrest
+        function clearAllActiveEntities() {
+            // Cancel timers
+            clearTimeout(gameState.spawnTimer);
+            clearInterval(gameState.difficultyTimer);
+            clearTimeout(gameState.policeTimer);
+
+            // Clean Arrays
+            gameState.moneyElements.forEach(item => {
+                if (item.dom && item.dom.parentNode) {
+                    item.dom.parentNode.removeChild(item.dom);
+                }
+            });
+            gameState.moneyElements = [];
+
+            gameState.copCars.forEach(cop => {
+                if (cop.cleanupTimer) clearInterval(cop.cleanupTimer);
+                if (cop.dom && cop.dom.parentNode) {
+                    cop.dom.parentNode.removeChild(cop.dom);
+                }
+            });
+            gameState.copCars = [];
+
+            // Clear extra visual overlays/dom inside spawn container
+            spawnContainer.innerHTML = '';
+
+            // Turn off special background effects & banners
+            gamePlayArea.classList.remove('siren-active');
+            policeAlertBanner.classList.add('hidden');
+            difficultyAlert.classList.add('hidden');
+        }
+
+        function startGame() {
+            titleScreen.classList.add('hidden');
+            gameOverScreen.classList.add('hidden');
+            difficultyAlert.classList.add('hidden');
+
+            const arrestOverlay = document.getElementById('arrestOverlay');
+            if (arrestOverlay) {
+                arrestOverlay.classList.add('hidden');
+                arrestOverlay.style.opacity = '0';
+            }
+            
+            gameState.isPlaying = true;
+            gameState.score = 0;
+            gameState.life = CONFIG.maxLife;
+            gameState.speedLevel = 1;
+            gameState.totalCatches = 0;
+            gameState.startTime = Date.now();
+            gameState.elapsedSeconds = 0;
+            gameState.policeWarningActive = false;
+            gameState.policeAlertActive = false;
+            gameState.policeAlertEndTime = 0;
+            gameState.catchesCount = { 10000: 0, 5000: 0, 1000: 0, 500: 0, 100: 0 };
+            
+            spawnContainer.innerHTML = '';
+            gameState.moneyElements = [];
+            gameState.copCars = [];
+
+            updateHud();
+            updateThrowers(); // Ensure proper initial visible throwers based on Level 1
+            policeAlertBanner.classList.add('hidden');
+            gamePlayArea.classList.remove('siren-active');
+
+            playSound('level_up');
+            startBgm();
+
+            scheduleMoneySpawning();
+            
+            // Speed progression scale every 10 seconds
+            gameState.difficultyTimer = setInterval(() => {
+                if (!gameState.isPlaying) return;
+                increaseDifficulty();
+            }, 10000);
+
+            schedulePoliceChecking();
+
+            gameState.lastFrameTime = performance.now();
+            gameState.gameLoopId = requestAnimationFrame(updateGameFrame);
+        }
+
+        function resetGame() {
+            gameState.isPlaying = false;
+            stopBgm();
+            cancelAnimationFrame(gameState.gameLoopId);
+            clearAllActiveEntities();
+        }
+    </script>
+
+    <script>
+        function getSpawnInterval() {
+            const factor = Math.max(0, (10 - gameState.speedLevel) / 9);
+            const range = CONFIG.baseSpawnInterval - CONFIG.minSpawnInterval;
+            return CONFIG.minSpawnInterval + (range * factor);
+        }
+
+        function getFallSpeed() {
+            const accelerationStep = 0.60;
+            return Math.min(CONFIG.maxSpeed, CONFIG.baseSpeed + (gameState.speedLevel - 1) * accelerationStep);
+        }
+
+        function scheduleMoneySpawning() {
+            if (!gameState.isPlaying) return;
+            
+            const nextInterval = getSpawnInterval();
+            gameState.spawnTimer = setTimeout(() => {
+                spawnMoney();
+                scheduleMoneySpawning();
+            }, nextInterval);
+        }
+
+        function spawnMoney() {
+            if (!gameState.isPlaying) return;
+
+            const rand = Math.random() * 100;
+            let chosenType;
+
+            if (rand < 7) {
+                chosenType = MONEY_TYPES[0]; // 10000 (7%)
+            } else if (rand < 18) {
+                chosenType = MONEY_TYPES[1]; // 5000 (11%)
+            } else if (rand < 43) {
+                chosenType = MONEY_TYPES[2]; // 1000 (25%)
+            } else if (rand < 68) {
+                chosenType = MONEY_TYPES[3]; // 500 (25%)
+            } else {
+                chosenType = MONEY_TYPES[4]; // 100 (32%)
+            }
+
+            const padding = 20;
+            const maxSpawnX = CONFIG.width - chosenType.width - padding;
+            const spawnX = padding + Math.random() * (maxSpawnX - padding);
+            const startY = -chosenType.height - 10;
+
+            const moneyEl = document.createElement('div');
+            moneyEl.className = `absolute select-none pointer-events-auto cursor-pointer transition-transform hover:scale-105 active:scale-95 duration-75`;
+            moneyEl.style.width = `${chosenType.width}px`;
+            moneyEl.style.height = `${chosenType.height}px`;
+            moneyEl.style.left = `${spawnX}px`;
+            moneyEl.style.top = `${startY}px`;
+
+            moneyEl.innerHTML = chosenType.renderHTML();
+            spawnContainer.appendChild(moneyEl);
+
+            const moneyObj = {
+                dom: moneyEl,
+                type: chosenType,
+                x: spawnX,
+                y: startY,
+                speed: getFallSpeed() * chosenType.speedMultiplier,
+                sinOffset: Math.random() * Math.PI * 2,
+                sinSpeed: 0.05 + Math.random() * 0.03
+            };
+
+            moneyEl.addEventListener('pointerdown', (e) => {
+                e.stopPropagation();
+                handleCashCatch(moneyObj);
+            });
+
+            gameState.moneyElements.push(moneyObj);
+        }
+    </script>
+
+    <script>
+        function schedulePoliceChecking() {
+            if (!gameState.isPlaying) return;
+
+            gameState.policeTimer = setTimeout(() => {
+                if (gameState.isPlaying && !gameState.policeWarningActive && !gameState.policeAlertActive) {
+                    if (Math.random() < 0.65) {
+                        triggerPolicePreWarning();
+                    }
+                }
+                schedulePoliceChecking();
+            }, CONFIG.copInterval);
+        }
+
+        // Trigger Phase 1: 2-second Pre-Warning stage (Positioned at Center of Play Area)
+        function triggerPolicePreWarning() {
+            if (!gameState.isPlaying || gameState.policeWarningActive || gameState.policeAlertActive) return;
+
+            gameState.policeWarningActive = true;
+            
+            // 逮捕ルール化による超緊迫仕様：赤黒の強烈なハザード明滅アラート
+            const inner = document.getElementById('policeAlertInner');
+            inner.className = "w-full px-6 py-4 rounded-xl shadow-[0_0_30px_rgba(239,68,68,0.8)] border-4 flex flex-col items-center gap-1.5 transition-all duration-300 bg-slate-950 border-red-500 text-red-500 font-extrabold text-sm animate-[pulse_0.25s_infinite]";
+            policeBannerIcon.className = "fa-solid fa-triangle-exclamation text-red-500 text-3xl animate-bounce";
+            policeBannerText.innerText = "\u26A0\uFE0F EMERGENCY \u26A0\uFE0F\n\u30d1\u30c8\u30ab\u30fc\u63a5\u8fd1\u4e2d\uff01\n\u3053\u305e\u3063\u3066\u624b\u3092\u5f15\u3051\uff01";
+            policeAlertBanner.classList.remove('hidden');
+
+            // 接近前兆の段階から画面を不穏に赤く点滅させる
+            gamePlayArea.classList.add('siren-active');
+
+            playSound('warning_alert');
+            const alertSfxInterval = setInterval(() => {
+                if (gameState.policeWarningActive && gameState.isPlaying) {
+                    playSound('warning_alert');
+                } else {
+                    clearInterval(alertSfxInterval);
+                }
+            }, 300); // 警告SEのテンポを倍速にして極度の焦燥感を演出
+
+            // Wait exactly 2.0 seconds
+            setTimeout(() => {
+                clearInterval(alertSfxInterval);
+                if (gameState.isPlaying && gameState.policeWarningActive) {
+                    gameState.policeWarningActive = false;
+                    triggerPoliceCar();
+                }
+            }, 2000);
+        }
+
+        // Trigger Phase 2: Spawning the cop car on lower asphalt road lanes (procedural emoji avoidance)
+        function triggerPoliceCar() {
+            if (!gameState.isPlaying) return;
+
+            gameState.policeAlertActive = true;
+            
+            // 触ったら一撃逮捕であることを警告する最恐アラート
+            const inner = document.getElementById('policeAlertInner');
+            inner.className = "w-full px-6 py-4 rounded-xl shadow-[0_0_55px_rgba(239,68,68,0.95)] border-4 flex flex-col items-center gap-1.5 transition-all duration-300 bg-red-950 border-red-500 text-white font-black text-sm animate-[bounce_0.6s_infinite]";
+            policeBannerIcon.className = "fa-solid fa-skull-crossbones text-red-500 text-4xl animate-spin";
+            policeBannerText.innerText = "\uD83D\uDEA8 \u691c\u6319\u4e2d \uD83D\uDEA8\n\u4eca\u63b4\u3080\u3068\u5373\u523b\u902e\u6355\uff01\n\u30bf\u30c3\u30c1\u306f\u7d76\u5bfe\u7981\u6b62\uff01";
+            
+            // Activate strong red flashing background state for play area
+            gamePlayArea.classList.add('siren-active');
+            playSound('siren');
+
+            const startFromLeft = Math.random() < 0.5;
+            const startX = startFromLeft ? -110 : CONFIG.width + 10;
+            const targetX = startFromLeft ? CONFIG.width + 10 : -110;
+            
+            const carY = gamePlayArea.clientHeight - 80 - 45; 
+            
+            const copEl = document.createElement('div');
+            copEl.className = `absolute select-none cursor-pointer text-4xl flex items-center justify-center transition-all z-20`;
+            copEl.style.width = '100px';
+            copEl.style.height = '60px';
+            copEl.style.left = `${startX}px`;
+            copEl.style.top = `${carY}px`;
+            copEl.style.transform = startFromLeft ? 'scaleX(-1)' : 'scaleX(1)';
+
+            // Render police car graphic with adjusted sirens (siren-red and siren-blue alternating styles)
+            copEl.innerHTML = `
+                <div class="relative flex flex-col items-center">
+                    <div class="absolute -top-3.5 left-[42px] flex gap-0.5 z-10 pointer-events-none">
+                        <div class="w-2.5 h-2 rounded-t-sm siren-red"></div>
+                        <div class="w-2.5 h-2 rounded-t-sm siren-blue"></div>
+                    </div>
+                    <span class="text-4xl filter drop-shadow-[0_4px_5px_rgba(0,0,0,0.6)]">&#x1F693;</span>
+                    <div class="w-16 h-1.5 bg-red-500 rounded-full blur-sm mt-0.5 animate-pulse"></div>
+                </div>
+            `;
+
+            copEl.addEventListener('pointerdown', (e) => {
+                e.stopPropagation();
+                handleCopCarClick(copObj);
+            });
+
+            spawnContainer.appendChild(copEl);
+
+            const copObj = {
+                dom: copEl,
+                x: startX,
+                y: carY,
+                targetX: targetX,
+                speed: 4.8 + (gameState.speedLevel * 0.4),
+                isGoingRight: startFromLeft
+            };
+
+            gameState.copCars.push(copObj);
+
+            const sirenInterval = setInterval(() => {
+                if (!gameState.isPlaying || !gameState.policeAlertActive) {
+                    clearInterval(sirenInterval);
+                    return;
+                }
+                playSound('siren');
+            }, 1200);
+
+            copObj.cleanupTimer = sirenInterval;
+        }
+
+        function handleCopCarClick(copObj) {
+            // パトカーを誤タッチした際も即逮捕
+            triggerArrestSequence();
+        }
+
+        function removeCopCar(copObj) {
+            if (copObj.cleanupTimer) clearInterval(copObj.cleanupTimer);
+            if (copObj.dom && copObj.dom.parentNode) {
+                copObj.dom.parentNode.removeChild(copObj.dom);
+            }
+            gameState.copCars = gameState.copCars.filter(c => c !== copObj);
+            
+            if (gameState.copCars.length === 0) {
+                gameState.policeAlertActive = false;
+                gameState.policeAlertEndTime = Date.now(); // Record when patrol ended
+                policeAlertBanner.classList.add('hidden');
+                gamePlayArea.classList.remove('siren-active');
+            }
+        }
+    </script>
+
+    <script>
+        function handleCashCatch(moneyObj) {
+            if (!gameState.isPlaying) return;
+
+            let finalValue = moneyObj.type.value;
+            let wasInterceptedByCops = gameState.policeAlertActive;
+
+            if (wasInterceptedByCops) {
+                // パトロール中にお金をタッチした瞬間、即逮捕・一発ゲームオーバーへ
+                triggerArrestSequence();
+                return;
+            } else {
+                gameState.score += finalValue;
+                if (moneyObj.type.type === 'coin') {
+                    playSound('catch_coin');
+                } else {
+                    playSound('catch_paper');
+                }
+
+                // 実際に獲得した金額の種類（枚数）をカウント
+                gameState.catchesCount[finalValue]++;
+
+                spawnFloatingText(moneyObj.x + 10, moneyObj.y, `+&yen;${finalValue.toLocaleString()}`, 'text-emerald-600 font-bold text-sm bg-white/90 px-1.5 py-0.5 rounded border border-emerald-300');
+            }
+
+            gameState.totalCatches++;
+            updateHud();
+            removeMoney(moneyObj);
+        }
+
+        // 逮捕演出シーケンスの実装（裏画面チラ見え解消の100%不透明転移）
+        function triggerArrestSequence() {
+            gameState.isPlaying = false;
+            stopBgm();
+            cancelAnimationFrame(gameState.gameLoopId);
+
+            // 逮捕された瞬間に、画面に浮遊しているすべてのお金・パトカーを直ちに消去（DOMクリア）
+            clearAllActiveEntities();
+
+            // パトカーの多重和音サイレン演出
+            playSound('arrest');
+            const now = audioCtx.currentTime;
+            for (let i = 0; i < 3; i++) {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(650 + (i * 150), now);
+                osc.frequency.linearRampToValueAtTime(1300 + (i * 150), now + 0.8);
+                gain.gain.setValueAtTime(0.15, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 1.0);
+                osc.start(now);
+                osc.stop(now + 1.0);
+            }
+
+            // 「逮捕だ！！」黒幕を最前面に100%ソリッド（完全不透明）に表示
+            const arrestOverlay = document.getElementById('arrestOverlay');
+            if (arrestOverlay) {
+                arrestOverlay.classList.remove('hidden');
+                arrestOverlay.offsetHeight; // Reflow forcing browser render
+                arrestOverlay.style.opacity = '1';
+            }
+
+            // 1.8秒不透明で覆っている間に、裏の要素のクリア・リザルトの設定を仕込んでおく
+            setTimeout(() => {
+                // リザルト山積み＆ハイスコア記録処理
+                generateMoneyMountain(gameState.score);
+
+                const savedHighScore = localStorage.getItem('moneycatcher_highscore') || 0;
+                let isNewRecord = false;
+                
+                if (gameState.score > savedHighScore) {
+                    localStorage.setItem('moneycatcher_highscore', gameState.score);
+                    isNewRecord = true;
+                }
+
+                finalScoreDisplay.innerText = gameState.score.toLocaleString();
+                finalLevelDisplay.innerText = `LV.${gameState.speedLevel}`;
+                finalTimeDisplay.innerText = `${gameState.elapsedSeconds}\u79d2`;
+                finalCatchDisplay.innerText = `${gameState.totalCatches}\u56de`;
+
+                if (isNewRecord && gameState.score > 0) {
+                    newRecordBanner.classList.remove('hidden');
+                } else {
+                    newRecordBanner.classList.add('hidden');
+                }
+
+                // 不透明な逮捕カバーの裏側でゲームオーバー画面を表示。これにより切り替えチラ見えを防ぐ！
+                gameOverScreen.classList.remove('hidden');
+
+                // ゲームオーバー画面が露出されたのを見計らってから、逮捕オーバーレイをゆっくりフェードアウト
+                setTimeout(() => {
+                    if (arrestOverlay) {
+                        arrestOverlay.style.opacity = '0';
+                    }
+                    setTimeout(() => {
+                        if (arrestOverlay) {
+                            arrestOverlay.classList.add('hidden');
+                        }
+                    }, 500); // Wait for transition opacity 0 to end completely
+                }, 100);
+
+            }, 1800);
+        }
+
+        function handleAirMiss(e) {
+            const rect = gamePlayArea.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
+
+            if (clickY > gamePlayArea.clientHeight - 80) return;
+
+            playSound('miss');
+            deductLife(1);
+            
+            spawnFloatingText(clickX - 30, clickY - 15, '\u7a7a\u632f\u308a!', 'text-rose-600 font-bold text-xs bg-white/90 px-1 rounded border border-rose-300');
+
+            gameViewport.classList.add('shake-anim');
+            setTimeout(() => {
+                gameViewport.classList.remove('shake-anim');
+            }, 400);
+        }
+
+        function handleEscapeMiss(moneyObj) {
+            // パトカー出現中（警察パトロール中）、または通過直後100ms以内はお金を落としても免責となる特別ルール
+            const isGracePeriod = (Date.now() - gameState.policeAlertEndTime) <= 100;
+            if (gameState.policeAlertActive || isGracePeriod) {
+                spawnFloatingText(moneyObj.x + 10, gamePlayArea.clientHeight - 100, '\u30bb\u30fc\u30d5\uff01(\u30d1\u30c8\u30ed\u30fc\u30eb\u4e2d)', 'text-emerald-600 font-bold text-xs bg-white/90 px-1.5 py-0.5 rounded border border-emerald-300');
+            } else {
+                deductLife(1);
+                spawnFloatingText(moneyObj.x + 10, gamePlayArea.clientHeight - 100, '\u9003\u305f!', 'text-amber-600 font-bold text-xs bg-white/90 px-1 rounded border border-amber-300');
+            }
+            removeMoney(moneyObj);
+        }
+
+        function removeMoney(moneyObj) {
+            if (moneyObj.dom && moneyObj.dom.parentNode) {
+                moneyObj.dom.parentNode.removeChild(moneyObj.dom);
+            }
+            gameState.moneyElements = gameState.moneyElements.filter(item => item !== moneyObj);
+        }
+
+        function deductLife(amount) {
+            gameState.life = Math.max(0, gameState.life - amount);
+            updateHud();
+
+            if (gameState.life <= 0) {
+                endGame();
+            }
+        }
+
+        // Dynamically show throwers on the roof based on Level progression
+        function updateThrowers() {
+            const leftThrower = document.getElementById('throwerLeft');
+            const centerThrower = document.getElementById('throwerCenter');
+            const rightThrower = document.getElementById('throwerRight');
+            
+            const lvl = gameState.speedLevel;
+
+            // Level 1-2: Center only
+            // Level 3-4: Center + Left
+            // Level 5+: Center + Left + Right
+            if (centerThrower) {
+                centerThrower.style.opacity = '1';
+            }
+            if (leftThrower) {
+                if (lvl >= 3) {
+                    leftThrower.style.opacity = '1';
+                } else {
+                    leftThrower.style.opacity = '0';
+                }
+            }
+            if (rightThrower) {
+                if (lvl >= 5) {
+                    rightThrower.style.opacity = '1';
+                } else {
+                    rightThrower.style.opacity = '0';
+                }
+            }
+        }
+
+        // Upgraded fixed-position difficulty notifier system (Now Yellow Background at the Top)
+        function increaseDifficulty() {
+            gameState.speedLevel++;
+            playSound('level_up');
+            
+            // Show the static warning banner
+            difficultyAlertLevel.innerText = `LV.${gameState.speedLevel}`;
+            difficultyAlert.classList.remove('hidden');
+            difficultyAlert.style.opacity = '1';
+
+            updateThrowers();
+
+            // Dismiss static banner automatically after 2.2 seconds without layout shifting
+            setTimeout(() => {
+                if (gameState.isPlaying) {
+                    difficultyAlert.style.opacity = '0';
+                    setTimeout(() => {
+                        difficultyAlert.classList.add('hidden');
+                    }, 300);
+                }
+            }, 2200);
+
+            updateHud();
+        }
+
+        function updateHud() {
+            scoreDisplay.innerText = gameState.score.toLocaleString();
+            
+            let speedText = `LV.${gameState.speedLevel}`;
+            if (gameState.speedLevel >= 10) speedText += " (IMPOSSIBLE \uD83D\uDC80)";
+            else if (gameState.speedLevel >= 7) speedText += " (INSANE \uD83D\uDD25)";
+            else if (gameState.speedLevel >= 4) speedText += " (FAST \u26A1)";
+            else speedText += " (NORMAL)";
+            levelDisplay.innerText = speedText;
+
+            lifeText.innerText = `${gameState.life}/${CONFIG.maxLife}`;
+            const lifePct = (gameState.life / CONFIG.maxLife) * 100;
+            lifeBarFill.style.width = `${lifePct}%`;
+
+            if (gameState.life <= 5) {
+                lifeBarFill.className = "h-full bg-gradient-to-r from-red-600 to-red-500 animate-pulse";
+                lifeText.className = "text-red-600 font-bold animate-pulse";
+            } else if (gameState.life <= 10) {
+                lifeBarFill.className = "h-full bg-gradient-to-r from-orange-500 to-orange-400";
+                lifeText.className = "text-orange-500 font-bold";
+            } else {
+                lifeBarFill.className = "h-full bg-gradient-to-r from-emerald-500 to-emerald-400";
+                lifeText.className = "text-emerald-600 font-bold";
+            }
+        }
+    </script>
+
+    <script>
+        function updateGameFrame(timestamp) {
+            if (!gameState.isPlaying) return;
+
+            const elapsed = timestamp - gameState.lastFrameTime;
+            gameState.lastFrameTime = timestamp;
+
+            const currentSecs = Math.floor((Date.now() - gameState.startTime) / 1000);
+            if (currentSecs !== gameState.elapsedSeconds) {
+                gameState.elapsedSeconds = currentSecs;
+            }
+
+            // 1. Progress active money items positions
+            for (let i = gameState.moneyElements.length - 1; i >= 0; i--) {
+                const item = gameState.moneyElements[i];
+                
+                item.y += item.speed;
+                
+                // お札は最初からダイナミックにゆらゆら揺れる
+                if (item.type.sinWave) {
+                    item.sinOffset += item.sinSpeed;
+                    const swayMagnitude = 8.5; // 左右の振れ幅を強化 (以前の4.5からさらに大きく増大)
+                    const swayOffset = Math.sin(item.sinOffset) * swayMagnitude;
+                    item.x += swayOffset;
+                    
+                    // 揺れに連動してふわりと回転する傾き効果を追加
+                    const angle = Math.sin(item.sinOffset) * 25; // 左右最大25度傾く
+                    item.dom.style.transform = `rotate(${angle}deg)`;
+                    
+                    const maxX = CONFIG.width - item.type.width - 10;
+                    if (item.x < 10) {
+                        item.x = 10;
+                        item.sinOffset += Math.PI; // Rebound sway
+                    }
+                    if (item.x > maxX) {
+                        item.x = maxX;
+                        item.sinOffset += Math.PI;
+                    }
+                } else {
+                    // コインは一切回転せず直下へ真っ直ぐ
+                    item.dom.style.transform = 'none';
+                }
+
+                item.dom.style.top = `${item.y}px`;
+                item.dom.style.left = `${item.x}px`;
+
+                const groundLimit = gamePlayArea.clientHeight - 80;
+                if (item.y + item.type.height > groundLimit) {
+                    handleEscapeMiss(item);
+                }
+            }
+
+            // 2. Progress active police cars
+            for (let j = gameState.copCars.length - 1; j >= 0; j--) {
+                const cop = gameState.copCars[j];
+                
+                if (cop.isGoingRight) {
+                    cop.x += cop.speed;
+                    if (cop.x > CONFIG.width + 120) {
+                        removeCopCar(cop);
+                        continue;
+                    }
+                } else {
+                    cop.x -= cop.speed;
+                    if (cop.x < -120) {
+                        removeCopCar(cop);
+                        continue;
+                    }
+                }
+
+                cop.dom.style.left = `${cop.x}px`;
+            }
+
+            gameState.gameLoopId = requestAnimationFrame(updateGameFrame);
+        }
+
+        function spawnFloatingText(x, y, text, classNames) {
+            const popup = document.createElement('div');
+            popup.className = `absolute select-none pointer-events-none font-bold text-center z-30 whitespace-nowrap shadow-sm ${classNames}`;
+            popup.style.left = `${x}px`;
+            popup.style.top = `${y}px`;
+            popup.innerHTML = text;
+
+            spawnContainer.appendChild(popup);
+
+            let curY = y;
+            let opacity = 1.0;
+            const floatTimer = setInterval(() => {
+                curY -= 1.8;
+                opacity -= 0.04;
+                popup.style.top = `${curY}px`;
+                popup.style.opacity = opacity;
+
+                if (opacity <= 0) {
+                    clearInterval(floatTimer);
+                    if (popup.parentNode) popup.parentNode.removeChild(popup);
+                }
+            }, 30);
+        }
+
+        function triggerScreenFlash(cssClass) {
+            const flashOverlay = document.createElement('div');
+            flashOverlay.className = `absolute inset-0 pointer-events-none z-30 ${cssClass} transition-opacity duration-300`;
+            gamePlayArea.appendChild(flashOverlay);
+            
+            setTimeout(() => {
+                flashOverlay.style.opacity = '0';
+                setTimeout(() => {
+                    if (flashOverlay.parentNode) flashOverlay.parentNode.removeChild(flashOverlay);
+                }, 300);
+            }, 50);
+        }
+
+        // Procedurally draws stackable vector piles of wealth based on final score
+        function generateMoneyMountain(score) {
+            moneyMountainArea.innerHTML = '';
+            
+            if (score === 0) {
+                moneyMountainArea.innerHTML = `
+                    <div class="text-[11px] text-slate-500 italic mb-2 select-none">
+                        獲得した資産はゼロです...
+                    </div>
+                `;
+                return;
+            }
+
+            // 現在の表示枠(280x112)より縦横20%広い 336px × 134px のコンテナを構築
+            const scatterContainer = document.createElement('div');
+            scatterContainer.className = 'absolute';
+            scatterContainer.style.width = '336px'; 
+            scatterContainer.style.height = '134px';
+            scatterContainer.style.left = '-28px';  // (280 - 336) / 2
+            scatterContainer.style.top = '-11px';   // (112 - 134) / 2
+            scatterContainer.style.overflow = 'visible';
+            moneyMountainArea.appendChild(scatterContainer);
+
+            const innerW = 336;
+            const innerH = 134;
+
+            // 中心に近い位置からランダム角度・極座標距離でばら撒く
+            const spawnCentralScatter = (htmlStr, w, h, maxRadius, rotRange = 360) => {
+                const angle = Math.random() * Math.PI * 2;
+                // 中心に寄りやすくするために乱数を累乗
+                const distance = Math.pow(Math.random(), 1.2) * maxRadius;
+                
+                const x = (innerW / 2) - (w / 2) + Math.cos(angle) * distance;
+                const y = (innerH / 2) - (h / 2) + Math.sin(angle) * distance;
+                const rot = (Math.random() - 0.5) * rotRange;
+                
+                const node = document.createElement('div');
+                node.className = 'absolute pointer-events-none select-none';
+                node.style.width = `${w}px`;
+                node.style.height = `${h}px`;
+                node.style.left = `${x}px`;
+                node.style.top = `${y}px`;
+                if (rot !== 0) {
+                    node.style.transform = `rotate(${rot}deg)`;
+                }
+                node.innerHTML = htmlStr;
+                scatterContainer.appendChild(node);
+            };
+
+            // 1. コイン（100円、500円）を底レイヤーに実獲得枚数分だけ撒く
+            [100, 500].forEach(val => {
+                const count = gameState.catchesCount[val] || 0;
+                const chosenCoin = MONEY_TYPES.find(t => t.value === val);
+                if (!chosenCoin) return;
+
+                for (let i = 0; i < count; i++) {
+                    const scale = 0.45; // ミニチュア用
+                    const w = chosenCoin.width * scale;
+                    const h = chosenCoin.height * scale;
+
+                    const coinHTML = `
+                        <div style="width: ${chosenCoin.width}px; height: ${chosenCoin.height}px; transform: scale(${scale}); transform-origin: top left; pointer-events: none; user-select: none;">
+                            ${chosenCoin.renderHTML()}
+                        </div>
+                    `;
+                    // 広めの125px半径でランダム配置（マスクではみ出し）
+                    spawnCentralScatter(coinHTML, w, h, 125, 360);
+                }
+            });
+
+            // 2. 紙幣（1,000円、5,000円、10,000円）を上レイヤーに実獲得枚数分だけ撒く
+            [1000, 5000, 10000].forEach(val => {
+                const count = gameState.catchesCount[val] || 0;
+                const chosenBill = MONEY_TYPES.find(t => t.value === val);
+                if (!chosenBill) return;
+
+                for (let i = 0; i < count; i++) {
+                    const scale = 0.40; // ミニチュア用
+                    const w = chosenBill.width * scale;
+                    const h = chosenBill.height * scale;
+
+                    const billHTML = `
+                        <div style="width: ${chosenBill.width}px; height: ${chosenBill.height}px; transform: scale(${scale}); transform-origin: top left; pointer-events: none; user-select: none;">
+                            ${chosenBill.renderHTML()}
+                        </div>
+                    `;
+                    // 広めの135px半径でランダム配置（マスクではみ出し）
+                    spawnCentralScatter(billHTML, w, h, 135, 360);
+                }
+            });
+        }
+
+        // Standard endGame sequence (triggered when life reaches 0)
+        function endGame() {
+            gameState.isPlaying = false;
+            stopBgm();
+            cancelAnimationFrame(gameState.gameLoopId);
+            
+            // ゲーム終了と同時に、降っているお金や警告バナー、パトカーなどの全オブジェクトをDOMから即時撤去！
+            clearAllActiveEntities();
+            
+            playSound('gameover');
+
+            // Draw money pile inside result page
+            generateMoneyMountain(gameState.score);
+
+            const savedHighScore = localStorage.getItem('moneycatcher_highscore') || 0;
+            let isNewRecord = false;
+            
+            if (gameState.score > savedHighScore) {
+                localStorage.setItem('moneycatcher_highscore', gameState.score);
+                isNewRecord = true;
+            }
+
+            finalScoreDisplay.innerText = gameState.score.toLocaleString();
+            finalLevelDisplay.innerText = `LV.${gameState.speedLevel}`;
+            finalTimeDisplay.innerText = `${gameState.elapsedSeconds}\u79d2`;
+            finalCatchDisplay.innerText = `${gameState.totalCatches}\u56de`;
+
+            if (isNewRecord && gameState.score > 0) {
+                newRecordBanner.classList.remove('hidden');
+            } else {
+                newRecordBanner.classList.add('hidden');
+            }
+
+            gameOverScreen.classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
